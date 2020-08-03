@@ -45,6 +45,7 @@ class SubWordListView(View):
 
             sub_word_list = [{
                 'word_id'          : word.id,
+                'word_name'        : word.name,
                 'word_description' : word.description,
                 'word_example'     : word.example,
                 'word_like'        : word.like,
@@ -73,6 +74,7 @@ class MainWordListView(View):
 
             main_word_list = [{
                 'word_id'          : word.id,
+                'word_name'        : word.name,
                 'word_description' : word.description,
                 'word_example'     : word.example,
                 'word_like'        : word.like,
@@ -85,3 +87,21 @@ class MainWordListView(View):
         except KeyError:
             return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
 
+class WordDetailView(View):
+    def get(self, request, word_id):
+        try:
+            word = Word.objects.prefetch_related('wordcategory_set__category').get(id = word_id)
+
+            word_info = {
+                'word_id'          : word.id,
+                'word_name'        : word.name,
+                'word_description' : word.description,
+                'word_example'     : word.example,
+                'word_like'        : word.like,
+                'word_dislike'     : word.dislike,
+                'word_category'    : [word_category.category.name for word_category in word.wordcategory_set.exclude(category__menu_id = 3)]
+            }
+            return JsonResponse({'word_info' : word_info}, status = 200)
+
+        except KeyError:
+            return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
