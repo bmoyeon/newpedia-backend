@@ -21,7 +21,7 @@ def login_required(func):
             return func(self, request, *args, **kwargs)
 
         except KeyError:
-            return HttpResponse(status=400)
+            return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
 
         except Account.DoesNotExist:
             return JsonResponse({'message' : 'UNKNOWN_USER'}, status = 401)
