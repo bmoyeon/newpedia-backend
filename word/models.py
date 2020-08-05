@@ -17,8 +17,6 @@ class Word(models.Model):
     name        = models.CharField(max_length = 200)
     description = models.CharField(max_length = 2000)
     example     = models.CharField(max_length = 1000, blank = True)
-    like        = models.IntegerField(default = 0)
-    dislike     = models.IntegerField(default = 0)
     created_at  = models.DateTimeField(auto_now_add = True)
     updated_at  = models.DateTimeField(auto_now = True)
     account     = models.ManyToManyField('account.Account', through = 'WordAccount')
@@ -37,6 +35,8 @@ class WordCategory(models.Model):
 class WordAccount(models.Model):
     word    = models.ForeignKey('Word', on_delete = models.CASCADE)
     account = models.ForeignKey('account.Account', on_delete = models.CASCADE)
+    like    = models.BooleanField(default = False)
+    dislike = models.BooleanField(default = False)
 
     class Meta:
         db_table = 'word_accounts'
