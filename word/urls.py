@@ -6,7 +6,8 @@ from .views import (
     WordDetailView,
     LikeView,
     DislikeView,
-    WordCreateView
+    WordCreateView,
+    WordUpdateView
 )
 
 urlpatterns = [
@@ -17,4 +18,5 @@ urlpatterns = [
     path('/<int:word_id>/like', LikeView.as_view()),
     path('/<int:word_id>/dislike', DislikeView.as_view()),
     path('/new', WordCreateView.as_view()),
+    path('/<int:word_id>/update', WordUpdateView.as_view()),
 ]
