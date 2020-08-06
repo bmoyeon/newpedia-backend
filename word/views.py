@@ -156,13 +156,20 @@ class LikeView(View):
 
                     return HttpResponse(status = 200)
 
-                return JsonResponse({'message' : 'NOT_ALLOWED'}, status = 406)
+                elif word.dislike == 1:
+                    word.like = True
+                    word.dislike = False
+                    word.save()
+
+                    return HttpResponse(status = 200)
+
+                return JsonResponse({'message' : 'ALREADY_EXISTS'}, status = 406)
 
             word = Word.objects.get(id = word_id)
             WordAccount.objects.create(
-                word_id    = word.id,
-                account_id = Account.objects.get(id = request.user.id).id,
-                like       = True
+                word_id = word.id,
+                account = Account.objects.get(id = request.user.id),
+                like    = True
             )
             return HttpResponse(status = 200)
 
@@ -190,13 +197,20 @@ class DislikeView(View):
 
                     return HttpResponse(status = 200)
 
-                return JsonResponse({'message' : 'NOT_ALLOWED'}, status = 406)
+                elif word.like == 1:
+                    word.dislike = True
+                    word.like = False
+                    word.save()
+
+                    return HttpResponse(status = 200)
+
+                return JsonResponse({'message' : 'ALREADY_EXISTS'}, status = 406)
 
             word = Word.objects.get(id = word_id)
             WordAccount.objects.create(
-                word_id    = word.id,
-                account_id = Account.objects.get(id = request.user.id).id,
-                dislike    = True
+                word_id = word.id,
+                account = Account.objects.get(id = request.user.id),
+                dislike = True
             )
             return HttpResponse(status = 200)
 
