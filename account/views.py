@@ -37,7 +37,10 @@ class KakaoLogInView(View):
         )
         access_token = jwt.encode({'user_id' : user.id}, SECRET_KEY, ALGORITHM).decode('utf-8')
 
-        return JsonResponse({'access_token' : access_token}, status = 200)
+        return JsonResponse({
+            'access_token' : access_token,
+            'nickname'     : user.nickname
+        }, status = 200)
 
 class NicknameView(View):
     @login_required

@@ -17,10 +17,10 @@ class Word(models.Model):
     name        = models.CharField(max_length = 200)
     description = models.CharField(max_length = 2000)
     example     = models.CharField(max_length = 1000, blank = True)
-    created_at  = models.DateTimeField(auto_now_add = True)
-    updated_at  = models.DateTimeField(auto_now = True)
     account     = models.ManyToManyField('account.Account', through = 'WordAccount')
     category    = models.ManyToManyField('Category', through = 'WordCategory')
+    created_at  = models.DateTimeField(auto_now_add = True)
+    updated_at  = models.DateTimeField(auto_now = True)
 
     class Meta:
         db_table = 'words'
