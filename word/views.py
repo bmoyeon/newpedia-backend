@@ -23,7 +23,7 @@ from account.utils import login_required
 class MenuView(View):
     def get(self, request):
         try:
-            menu_id = request.GET.get('menu_id')
+            menu_id = request.GET.get('menu_id', None)
 
             menus = Menu.objects.all()
             categories = Category.objects.select_related('menu').filter(menu = menu_id)
@@ -40,7 +40,7 @@ class MenuView(View):
 
             return JsonResponse({
                 'menu_list'     : menu_list,
-                'category_list' : category_list,
+                'category_list' : category_list
             }, status = 200)
 
         except KeyError:
@@ -59,8 +59,8 @@ class SubWordListView(View):
                 'word_name'        : word.name,
                 'word_description' : word.description,
                 'word_example'     : word.example,
-                'word_like'        : word.wordaccount_set.filter(word_id = word.id, like = 1).count(),
-                'word_dislike'     : word.wordaccount_set.filter(word_id = word.id, dislike = 1).count(),
+                'word_like'        : word.wordaccount_set.filter(Q(word_id = word.id) & Q(like = 1)).count(),
+                'word_dislike'     : word.wordaccount_set.filter(Q(word_id = word.id) & Q(dislike = 1)).count(),
                 'word_category'    : [
                     word_category.category.name
                     for word_category in word.wordcategory_set.exclude(category__menu_id = 3)
@@ -71,20 +71,21 @@ class SubWordListView(View):
 
             return JsonResponse({'sub_word_list' : sub_word_list}, status = 200)
 
+        except Word.DoesNotExist:
+            return JsonResponse({'message' : 'DOES_NOT_EXISTS'}, status = 404)
+
         except KeyError:
             return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
 
 class MainWordListView(View):
     def get(self, request):
         try:
-            page = request.GET.get('page', 1)
             words = Word.objects.prefetch_related(
                 'wordcategory_set__category',
                 'wordaccount_set__account'
             ).order_by('-created_at')
 
             sort = request.GET.get('sort', None)
-
             if sort == 'new':
                 words
             elif sort == 'like':
@@ -92,6 +93,7 @@ class MainWordListView(View):
                     sum = Sum('wordaccount__like')
                 ).order_by('-sum')
 
+            page = request.GET.get('page', 1)
             paginator = Paginator(words, 7)
             total_count = paginator.count
             words = paginator.get_page(page)
@@ -101,28 +103,27 @@ class MainWordListView(View):
                 'word_name'        : word.name,
                 'word_description' : word.description,
                 'word_example'     : word.example,
-                'word_like'        : word.wordaccount_set.filter(word_id = word.id, like = 1).count(),
-                'word_dislike'     : word.wordaccount_set.filter(word_id = word.id, dislike = 1).count(),
+                'word_like'        : word.wordaccount_set.filter(Q(word_id = word.id) & Q(like = 1)).count(),
+                'word_dislike'     : word.wordaccount_set.filter(Q(word_id = word.id) & Q(dislike = 1)).count(),
                 'word_category'    : [
                     word_category.category.name
                     for word_category in word.wordcategory_set.exclude(category__menu_id = 3)
                 ],
-                'word_created_user' : (
-                    word.wordaccount_set.filter(is_created=1).first().account.nickname
-                    if word.wordaccount_set.filter(is_created=1).first() else ''
-                ),
+                'word_created_user' : word.wordaccount_set.get(is_created = 1).account.nickname,
                 'word_updated_user' : (
-                    word.wordaccount_set.filter(is_updated=1).last().account.nickname
-                    if word.wordaccount_set.filter(is_updated=1).last() else ''
+                    word.wordaccount_set.filter(is_updated = 1).last().account.nickname
+                    if word.wordaccount_set.filter(is_updated = 1).last() else ''
                 )
             } for word in words]
-
             return JsonResponse({'main_word_list' : main_word_list}, status = 200)
+
+        except Word.DoesNotExist:
+            return JsonResponse({'message' : 'DOES_NOT_EXISTS'}, status = 404)
 
         except KeyError:
             return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
 
-class WordDetailView(View):
+class WordView(View):
     def get(self, request, word_id):
         try:
             word = Word.objects.prefetch_related(
@@ -130,7 +131,6 @@ class WordDetailView(View):
                 'wordaccount_set__account'
             ).get(id = word_id)
 
-            word_created = word.wordaccount_set.filter(is_created=1).first()
             word_updated = word.wordaccount_set.filter(is_updated=1).last()
 
             word_info = {
@@ -138,16 +138,105 @@ class WordDetailView(View):
                 'word_name'        : word.name,
                 'word_description' : word.description,
                 'word_example'     : word.example,
-                'word_like'        : word.wordaccount_set.filter(word_id = word.id, like = 1).count(),
-                'word_dislike'     : word.wordaccount_set.filter(word_id = word.id, dislike = 1).count(),
+                'word_like'        : word.wordaccount_set.filter(Q(word_id = word.id) & Q(like = 1)).count(),
+                'word_dislike'     : word.wordaccount_set.filter(Q(word_id = word.id) & Q(dislike = 1)).count(),
                 'word_category'    : [
                     word_category.category.name
                     for word_category in word.wordcategory_set.exclude(category__menu_id = 3)
                 ],
-                'word_created_user' : (word_created.account.nickname if word_created else ''),
+                'word_created_user' : word.wordaccount_set.get(is_created = 1).account.nickname,
                 'word_updated_user' : (word_updated.account.nickname if word_updated else '')
             }
             return JsonResponse({'word_info' : word_info}, status = 200)
+
+        except Word.DoesNotExist:
+            return JsonResponse({'message' : 'DOES_NOT_EXISTS'}, status = 404)
+
+        except KeyError:
+            return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
+
+    @login_required
+    def put(self, request, word_id):
+        data = json.loads(request.body)
+
+        try:
+            word = Word.objects.get(id = word_id)
+
+            word.name        = data['name']
+            word.description = data['description']
+            word.example     = data['example']
+            word.save()
+
+            word_category = WordCategory.objects.filter(word_id = word_id)
+            word_category.delete()
+
+            category_list = data['category'] + [find_category(data['name'])]
+            for category in category_list:
+                WordCategory.objects.create(
+                    word_id     = word_id,
+                    category_id = Category.objects.get(name = category).id
+                )
+
+            if WordAccount.objects.filter(
+                word_id = word_id,
+                account = Account.objects.get(id = request.user.id)
+            ).exists():
+                word_account = WordAccount.objects.get(
+                    word_id = word_id,
+                    account = Account.objects.get(id = request.user.id)
+                )
+                if WordAccount.objects.filter(is_updated = False):
+                    word_account.is_updated = True
+                    word_account.save()
+
+                    return HttpResponse(status = 200)
+
+            WordAccount.objects.create(
+                word_id    = word_id,
+                account    = Account.objects.get(id = request.user.id),
+                is_updated = True
+            )
+
+            return HttpResponse(status = 200)
+
+        except Category.DoesNotExist:
+            return JsonResponse({'message' : 'DOES_NOT_EXISTS'}, status = 404)
+
+        except KeyError:
+            return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
+
+class WordCreateView(View):
+    @login_required
+    def post(self, request):
+        data = json.loads(request.body)
+
+        try:
+            if Word.objects.filter(name = data['name']).exists():
+                return JsonResponse({'message' : 'ALREADY_WORD'}, status = 200)
+
+            word_id = Word.objects.create(
+                name        = data['name'],
+                description = data['description'],
+                example     = data['example']
+            ).id
+
+            category_list = data['category'] + [find_category(data['name'])]
+            for category in category_list:
+                WordCategory.objects.create(
+                    word_id     = word_id,
+                    category_id = Category.objects.get(name = category).id
+                )
+
+            WordAccount.objects.create(
+                word_id    = word_id,
+                account    = Account.objects.get(id = request.user.id),
+                is_created = True
+            )
+
+            return HttpResponse(status = 200)
+
+        except Category.DoesNotExist:
+            return JsonResponse({'message' : 'DOES_NOT_EXISTS'}, status = 404)
 
         except KeyError:
             return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
@@ -180,7 +269,7 @@ class LikeView(View):
 
                     return HttpResponse(status = 200)
 
-                return JsonResponse({'message' : 'ALREADY_EXISTS'}, status = 406)
+                return JsonResponse({'message' : 'ALREADY_EXISTS'}, status = 200)
 
             word = Word.objects.get(id = word_id)
             WordAccount.objects.create(
@@ -189,6 +278,9 @@ class LikeView(View):
                 like    = True
             )
             return HttpResponse(status = 200)
+
+        except Word.DoesNotExist:
+            return JsonResponse({'message' : 'DOES_NOT_EXISTS'}, status = 404)
 
         except KeyError:
             return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
@@ -221,7 +313,7 @@ class DislikeView(View):
 
                     return HttpResponse(status = 200)
 
-                return JsonResponse({'message' : 'ALREADY_EXISTS'}, status = 406)
+                return JsonResponse({'message' : 'ALREADY_EXISTS'}, status = 200)
 
             word = Word.objects.get(id = word_id)
             WordAccount.objects.create(
@@ -231,91 +323,8 @@ class DislikeView(View):
             )
             return HttpResponse(status = 200)
 
-        except KeyError:
-            return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
-
-class WordCreateView(View):
-    @login_required
-    def get(self, request):
-        return JsonResponse({'nickname' : request.user.nickname}, status = 200)
-
-    @login_required
-    def post(self, request):
-        data = json.loads(request.body)
-
-        try:
-
-            if Word.objects.filter(name = data['name']).exists():
-                return JsonResponse({'message' : 'ALREADY_WORD'}, status = 200)
-
-            word_id = Word.objects.create(
-                name        = data['name'],
-                description = data['description'],
-                example     = data['example']
-            ).id
-
-            category_list = data['category'] + [find_category(data['name'])]
-            for category in category_list:
-                WordCategory.objects.create(
-                    word_id     = word_id,
-                    category_id = Category.objects.get(name = category).id
-                )
-
-            WordAccount.objects.create(
-                word_id    = word_id,
-                account    = Account.objects.get(id = request.user.id),
-                is_created = True
-            )
-
-            return HttpResponse(status = 200)
-
-        except KeyError:
-            return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
-
-class WordUpdateView(View):
-    @login_required
-    def post(self, request, word_id):
-        data = json.loads(request.body)
-
-        try:
-            word = Word.objects.get(id = word_id)
-
-            word.name        = data['name']
-            word.description = data['description']
-            word.example     = data['example']
-            word.save()
-
-            word_category = WordCategory.objects.filter(word_id = word_id)
-            word_category.delete()
-
-            category_list = data['category'] + [find_category(data['name'])]
-            for category in category_list:
-                WordCategory.objects.create(
-                    word_id     = word_id,
-                    category_id = Category.objects.get(name = category).id
-                )
-
-            if WordAccount.objects.filter(
-                word_id    = word_id,
-                account_id = Account.objects.get(id=request.user.id).id
-            ).exists():
-                word_account = WordAccount.objects.get(
-                    word_id = word_id,
-                    account = Account.objects.get(id = request.user.id)
-                )
-                if WordAccount.objects.filter(is_updated = False):
-                    word_account.is_updated = True
-                    word_account.save()
-
-                    return HttpResponse(status = 200)
-
-            WordAccount.objects.create(
-                word_id    = word_id,
-                account    = Account.objects.get(id = request.user.id),
-                is_updated = True
-            )
-
-            return HttpResponse(status = 200)
+        except Word.DoesNotExist:
+            return JsonResponse({'message' : 'DOES_NOT_EXISTS'}, status = 404)
 
         except KeyError:
             return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
