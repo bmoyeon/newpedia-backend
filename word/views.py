@@ -1,13 +1,13 @@
 import json
 import random
-import re
 
 from django.views import View
 from django.http import (
     HttpResponse,
     JsonResponse
 )
-from django.db.models import Count
+from django.db.models import Q, Sum
+from django.core.paginator import Paginator
 
 from .models import (
     Menu,
@@ -16,6 +16,7 @@ from .models import (
     WordAccount,
     WordCategory
 )
+from .utils import find_category
 from account.models import Account
 from account.utils import login_required
 
@@ -39,7 +40,7 @@ class MenuView(View):
 
             return JsonResponse({
                 'menu_list'     : menu_list,
-                'category_list' : category_list
+                'category_list' : category_list,
             }, status = 200)
 
         except KeyError:
@@ -76,6 +77,7 @@ class SubWordListView(View):
 class MainWordListView(View):
     def get(self, request):
         try:
+            page = request.GET.get('page', 1)
             words = Word.objects.prefetch_related(
                 'wordcategory_set__category',
                 'wordaccount_set__account'
@@ -87,10 +89,12 @@ class MainWordListView(View):
                 words
             elif sort == 'like':
                 words = words.annotate(
-                    count = Count('wordaccount__word_id')
-                ).filter(
-                    wordaccount__like = 1
-                ).order_by('-count')
+                    sum = Sum('wordaccount__like')
+                ).order_by('-sum')
+
+            paginator = Paginator(words, 7)
+            total_count = paginator.count
+            words = paginator.get_page(page)
 
             main_word_list = [{
                 'word_id'          : word.id,
@@ -102,7 +106,15 @@ class MainWordListView(View):
                 'word_category'    : [
                     word_category.category.name
                     for word_category in word.wordcategory_set.exclude(category__menu_id = 3)
-                ]
+                ],
+                'word_created_user' : (
+                    word.wordaccount_set.filter(is_created=1).first().account.nickname
+                    if word.wordaccount_set.filter(is_created=1).first() else ''
+                ),
+                'word_updated_user' : (
+                    word.wordaccount_set.filter(is_updated=1).last().account.nickname
+                    if word.wordaccount_set.filter(is_updated=1).last() else ''
+                )
             } for word in words]
 
             return JsonResponse({'main_word_list' : main_word_list}, status = 200)
@@ -115,8 +127,11 @@ class WordDetailView(View):
         try:
             word = Word.objects.prefetch_related(
                 'wordcategory_set__category',
-                'wordaccount_set'
+                'wordaccount_set__account'
             ).get(id = word_id)
+
+            word_created = word.wordaccount_set.filter(is_created=1).first()
+            word_updated = word.wordaccount_set.filter(is_updated=1).last()
 
             word_info = {
                 'word_id'          : word.id,
@@ -128,7 +143,9 @@ class WordDetailView(View):
                 'word_category'    : [
                     word_category.category.name
                     for word_category in word.wordcategory_set.exclude(category__menu_id = 3)
-                ]
+                ],
+                'word_created_user' : (word_created.account.nickname if word_created else ''),
+                'word_updated_user' : (word_updated.account.nickname if word_updated else '')
             }
             return JsonResponse({'word_info' : word_info}, status = 200)
 
@@ -219,6 +236,10 @@ class DislikeView(View):
 
 class WordCreateView(View):
     @login_required
+    def get(self, request):
+        return JsonResponse({'nickname' : request.user.nickname}, status = 200)
+
+    @login_required
     def post(self, request):
         data = json.loads(request.body)
 
@@ -233,39 +254,7 @@ class WordCreateView(View):
                 example     = data['example']
             ).id
 
-            def find_category(name):
-                if re.compile('[가-기]+').findall(name[0]):
-                    category_name = 'ㄱ'
-                elif re.compile('[나-니]+').findall(name[0]):
-                    category_name = 'ㄴ'
-                elif re.compile('[다-디]+').findall(name[0]):
-                    category_name = 'ㄷ'
-                elif re.compile('[라-리]+').findall(name[0]):
-                    category_name = 'ㄹ'
-                elif re.compile('[마-미]+').findall(name[0]):
-                    category_name = 'ㅁ'
-                elif re.compile('[바-비]+').findall(name[0]):
-                    category_name = 'ㅂ'
-                elif re.compile('[사-시]+').findall(name[0]):
-                    category_name = 'ㅅ'
-                elif re.compile('[아-이]+').findall(name[0]):
-                    category_name = 'ㅇ'
-                elif re.compile('[자-지]+').findall(name[0]):
-                    category_name = 'ㅈ'
-                elif re.compile('[차-치]+').findall(name[0]):
-                    category_name = 'ㅊ'
-                elif re.compile('[카-키]+').findall(name[0]):
-                    category_name = 'ㅋ'
-                elif re.compile('[타-티]+').findall(name[0]):
-                    category_name = 'ㅌ'
-                elif re.compile('[파-피]+').findall(name[0]):
-                    category_name = 'ㅍ'
-                elif re.compile('[하-히]+').findall(name[0]):
-                    category_name = 'ㅎ'
-
-                return category_name
-
-            category_list = data['category'] + list(find_category(data['name']))
+            category_list = data['category'] + [find_category(data['name'])]
             for category in category_list:
                 WordCategory.objects.create(
                     word_id     = word_id,
@@ -274,7 +263,56 @@ class WordCreateView(View):
 
             WordAccount.objects.create(
                 word_id    = word_id,
-                account_id = Account.objects.get(id = request.user.id).id
+                account    = Account.objects.get(id = request.user.id),
+                is_created = True
+            )
+
+            return HttpResponse(status = 200)
+
+        except KeyError:
+            return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
+
+class WordUpdateView(View):
+    @login_required
+    def post(self, request, word_id):
+        data = json.loads(request.body)
+
+        try:
+            word = Word.objects.get(id = word_id)
+
+            word.name        = data['name']
+            word.description = data['description']
+            word.example     = data['example']
+            word.save()
+
+            word_category = WordCategory.objects.filter(word_id = word_id)
+            word_category.delete()
+
+            category_list = data['category'] + [find_category(data['name'])]
+            for category in category_list:
+                WordCategory.objects.create(
+                    word_id     = word_id,
+                    category_id = Category.objects.get(name = category).id
+                )
+
+            if WordAccount.objects.filter(
+                word_id    = word_id,
+                account_id = Account.objects.get(id=request.user.id).id
+            ).exists():
+                word_account = WordAccount.objects.get(
+                    word_id = word_id,
+                    account = Account.objects.get(id = request.user.id)
+                )
+                if WordAccount.objects.filter(is_updated = False):
+                    word_account.is_updated = True
+                    word_account.save()
+
+                    return HttpResponse(status = 200)
+
+            WordAccount.objects.create(
+                word_id    = word_id,
+                account    = Account.objects.get(id = request.user.id),
+                is_updated = True
             )
 
             return HttpResponse(status = 200)

@@ -33,10 +33,12 @@ class WordCategory(models.Model):
         db_table = 'word_categories'
 
 class WordAccount(models.Model):
-    word    = models.ForeignKey('Word', on_delete = models.CASCADE)
-    account = models.ForeignKey('account.Account', on_delete = models.CASCADE)
-    like    = models.BooleanField(default = False)
-    dislike = models.BooleanField(default = False)
+    word       = models.ForeignKey('Word', on_delete = models.CASCADE)
+    account    = models.ForeignKey('account.Account', on_delete = models.CASCADE)
+    like       = models.BooleanField(default = False)
+    dislike    = models.BooleanField(default = False)
+    is_created = models.BooleanField(default = 0)
+    is_updated = models.BooleanField(default = 0)
 
     class Meta:
         db_table = 'word_accounts'
