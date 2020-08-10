@@ -33,12 +33,17 @@ class KakaoLogInView(View):
 
         user, created = Account.objects.get_or_create(
             social_account = kakao_user_id,
-            social         = Social.objects.get(name = '카카오')
+            social         = Social.objects.get(name = 'kakao')
         )
         access_token = jwt.encode({'user_id' : user.id}, SECRET_KEY, ALGORITHM).decode('utf-8')
+
         return JsonResponse({'access_token' : access_token}, status = 200)
 
 class NicknameView(View):
+    @login_required
+    def get(self, request):
+        return JsonResponse({'nickname' : request.user.nickname}, status = 200)
+
     @login_required
     def post(self, request):
         try:
@@ -50,8 +55,8 @@ class NicknameView(View):
             user = request.user
             user.nickname = data['nickname']
             user.save()
+
             return HttpResponse(status = 200)
 
         except KeyError:
             return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
-
