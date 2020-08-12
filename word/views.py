@@ -67,6 +67,12 @@ class WordListView(View):
                     sum = Sum('wordaccount__like')
                 ).order_by('-sum')
 
+            search_word = request.GET.get('search_word', None)
+            if search_word == ' ' or search_word == '':
+                return JsonResponse({'message' : 'NO_VALUE'}, status = 200)
+            if search_word:
+                words = words.filter(name__icontains = search_word)
+
             page = request.GET.get('page', 1)
             paginator = Paginator(words, 7)
             total_count = paginator.count
@@ -310,6 +316,30 @@ class DislikeView(View):
 
             word_dislike = WordAccount.objects.filter(Q(word_id = word_id) & Q(dislike = 1)).count()
             return JsonResponse({'word_dislike' : word_dislike}, status = 200)
+
+        except KeyError:
+            return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
+
+class SearchListView(View):
+    def post(self, request):
+        data = json.loads(request.body)
+        try:
+            search_word = data['search_word']
+
+            if search_word == ' ' or search_word == "":
+                return JsonResponse({'message' : 'NO_RESULT'}, status = 200)
+
+            search = Q(name__startswith = search_word)
+
+            words = Word.objects.filter(search)
+
+            search_list = [{
+                'word_id'          : word.id,
+                'word_name'        : word.name,
+                'word_description' : word.description
+            } for word in words]
+
+            return JsonResponse({'search_list' : search_list}, status = 200)
 
         except KeyError:
             return JsonResponse({'message' : 'INVALID_KEY'}, status = 400)
