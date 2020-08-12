@@ -7,7 +7,7 @@ class Social(models.Model):
         db_table = 'socials'
 
 class Account(models.Model):
-    nickname       = models.CharField(max_length = 50, unique = True, blank = True)
+    nickname       = models.CharField(max_length = 50, blank = True)
     social_account = models.CharField(max_length = 100)
     social         = models.ForeignKey('Social', on_delete = models.SET_NULL, null = True)
 
