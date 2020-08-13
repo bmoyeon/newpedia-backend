@@ -1,6 +1,7 @@
 import json
 import jwt
 import requests
+import re
 
 from django.views import View
 from django.http import (
@@ -51,12 +52,19 @@ class NicknameView(View):
     def post(self, request):
         try:
             data = json.loads(request.body)
+            nickname = data['nickname']
 
-            if Account.objects.filter(nickname = data['nickname']).exists():
-                return JsonResponse({'message' : 'ALREADY_EXIST'}, status = 401)
+            if nickname == ' ' or nickname == '':
+                return JsonResponse({'message' : 'NO_VALUE'}, status = 200)
+
+            if re.match("^[가-힣]{1,12}$", nickname) == None:
+                return HttpResponse(status = 401)
+
+            if Account.objects.filter(nickname = nickname).exists():
+                return JsonResponse({'message' : 'ALREADY_EXISTS'}, status = 200)
 
             user = request.user
-            user.nickname = data['nickname']
+            user.nickname = nickname
             user.save()
 
             return HttpResponse(status = 200)
